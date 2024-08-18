@@ -1,9 +1,9 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const axios = require('axios');
-const cheerio = require('cheerio');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-let servidorEstado = {};
+const puppeteer = require('puppeteer');
+const { Client, GatewayIntentBits } = require('discord.js');
+
+// Configura tu bot de Discord
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const servidoresPermitidos = [
     '[ESP/ENG] LATAMSQUAD #1 - latamsquad.net',
@@ -11,43 +11,66 @@ const servidoresPermitidos = [
     '[ENG/ESP] Pro-RP Latino-America #1'
 ];
 
-client.once('ready', () => {
-    console.log('Bot está en línea!');
-    revisarServidores();
-    setInterval(revisarServidores, 60000); // Revisa cada 60 segundos
-});
+const mapasDeseados = ['Goose Green', 'The Falklands'];
 
-async function revisarServidores() {
+let ultimoMapa = {};
+
+// Función para verificar el estado de los servidores
+async function verificarServidores() {
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.goto('https://www.realitymod.com/prspy/');
+
+    // Espera hasta que el tbody específico esté presente
+    await page.waitForSelector('tbody[aria-live="polite"]');
+
     try {
-        // Reemplaza esta URL con la URL real de la página que quieres scrapear
-        const response = await axios.get('https://www.realitymod.com/prspy/');
-        const html = response.data;
-        const $ = cheerio.load(html);
-        
-        $('tr').each((index, element) => {
-            const mapName = $(element).find('.data.mapname').text().trim();
-            const numPlayers = $(element).find('.data.numplayers').text().trim();
-            const serverName = $(element).find('.data.servername').text().trim();
+        // Extrae los datos
+        const servidores = await page.$$eval('tbody[aria-live="polite"] tr', filas => {
+            return filas.map(fila => {
+                const serverNameElement = fila.querySelector('.data.servername .wrapper');
+                const numPlayersElement = fila.querySelector('.data.numplayers .wrapper');
+                const mapNameElement = fila.querySelector('.data.mapname .wrapper');
 
-            if (servidoresPermitidos.includes(serverName)) {
-                if (mapName === 'The Falklands' || mapName === 'Goose Green') {
-                    if (!servidorEstado[serverName] || servidorEstado[serverName] !== mapName) {
-                        // Si es la primera vez o el mapa ha cambiado
-                        servidorEstado[serverName] = mapName;
-                        client.channels.cache.get('1067266128751120435').send(`LO' PUTO DE ${serverName} ESTÁN JUGANDO ${mapName} CON ${numPlayers} PELOTUDO ADENTRO`);
-                    }
+                if (serverNameElement && numPlayersElement && mapNameElement) {
+                    const serverName = serverNameElement.innerText.trim();
+                    const numPlayers = numPlayersElement.innerText.trim();
+                    const mapName = mapNameElement.innerText.trim();
+                    return { serverName, numPlayers, mapName };
                 } else {
-                    // Si el servidor ya no está jugando en los mapas de interés, reseteamos el estado
-                    if (servidorEstado[serverName]) {
-                        delete servidorEstado[serverName];
-                    }
+                    return null;
                 }
+            }).filter(servidor => servidor !== null); // Filtra elementos nulos
+        });
+
+        // Filtrar los servidores permitidos y mapas deseados
+        servidores.forEach(servidor => {
+            if (servidoresPermitidos.includes(servidor.serverName) && mapasDeseados.includes(servidor.mapName)) {
+                if (ultimoMapa[servidor.serverName] !== servidor.mapName) {
+                    const canal = client.channels.cache.get('1067266128751120435');
+                    canal.send(`🚨 Están jugando en ${servidor.serverName}: ${servidor.mapName} con ${servidor.numPlayers} jugadores.`);
+                    ultimoMapa[servidor.serverName] = servidor.mapName;
+                }
+            } else if (ultimoMapa[servidor.serverName]) {
+                delete ultimoMapa[servidor.serverName];
             }
         });
+
     } catch (error) {
-        console.error('Error al obtener los datos:', error);
-        client.channels.cache.get('1067266128751120435').send('Hubo un error al obtener los datos del servidor.');
+        console.error('Error al extraer datos:', error);
     }
+
+    await browser.close();
 }
 
+// Verificar los servidores cada 1 minuto
+setInterval(verificarServidores, 60000);
+
+// Conectar el bot a Discord
+client.once('ready', () => {
+    console.log('Bot conectado a Discord');
+    verificarServidores(); // Ejecutar inmediatamente al iniciar
+});
+
 client.login('MTI2MTA1NjA1NTU1MTU5MDQ0MA.Gphh4-.2lWjiIjBdcYjTF06-WooUt6GnWUMCVgkNIT7jg');
+
