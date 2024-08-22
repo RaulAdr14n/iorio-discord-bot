@@ -1,4 +1,5 @@
-
+const token = process.env.DISCORD_TOKEN;
+const idCanal = '1067266128751120435';
 const puppeteer = require('puppeteer');
 const { Client, GatewayIntentBits } = require('discord.js');
 
@@ -47,7 +48,7 @@ async function verificarServidores() {
         servidores.forEach(servidor => {
             if (servidoresPermitidos.includes(servidor.serverName) && mapasDeseados.includes(servidor.mapName)) {
                 if (ultimoMapa[servidor.serverName] !== servidor.mapName) {
-                    const canal = client.channels.cache.get('1067266128751120435');
+                    const canal = client.channels.cache.get(idCanal);
                     canal.send(`🚨 Están jugando en ${servidor.serverName}: ${servidor.mapName} con ${servidor.numPlayers} jugadores.`);
                     ultimoMapa[servidor.serverName] = servidor.mapName;
                 }
@@ -72,5 +73,5 @@ client.once('ready', () => {
     verificarServidores(); // Ejecutar inmediatamente al iniciar
 });
 
-client.login('MTI2MTA1NjA1NTU1MTU5MDQ0MA.Gphh4-.2lWjiIjBdcYjTF06-WooUt6GnWUMCVgkNIT7jg');
+client.login(token);
 
